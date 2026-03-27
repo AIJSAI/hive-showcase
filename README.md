@@ -138,7 +138,7 @@ See [docs/tech-decisions.md](docs/tech-decisions.md) for detailed ADR excerpts.
 ## Results
 
 - **22 Architectural Decision Records** documenting every significant technical choice
-- **130+ development tasks** across 7 completed phases with verification gates
+- **130+ development tasks** across 8 completed phases with verification gates
 - **6-layer security model** from network to supply chain
 - **5+ agents running** with modular domain team architecture
 - **Zero public ports** — true network invisibility via Tailscale mesh
@@ -159,7 +159,7 @@ See [docs/tech-decisions.md](docs/tech-decisions.md) for detailed ADR excerpts.
 | Phase 4: Expansion | ✅ | Firewall hardening, skill deployment |
 | Phase 5: Polish & Observability | ✅ | Mermaid diagrams, CI, Langfuse |
 | Phase 6: Production Hardening | ✅ | Auto-updates, backup automation |
-| Phase 7: CC Runtime Engine | 🟡 | Claude Code integration as development tooling |
+| Phase 7: CC Runtime Engine | ✅ | Claude Code CLI integration, piped automation, build hooks |
 
 ---
 
