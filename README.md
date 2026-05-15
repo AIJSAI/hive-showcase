@@ -132,19 +132,23 @@ graph TB
 | ADR-014 | Modular Domain Team Architecture | Teams added incrementally without architectural changes; depth-2 nesting (lead → workers) |
 | ADR-016 | Adaptive Self-Improvement | Weekly self-assessment cron, tiered config change autonomy, cross-agent knowledge sharing |
 | ADR-020 | Runtime Change Protocol | Structured workflow for config changes: propose → verify → apply → test → commit |
+| ADR-023 | Chef Antoine + Kroger Integration | New `chef-lead` domain team via the ADR-014 expansion protocol; Kroger Cart API integration via host cron pre-fetch pattern (consistent with sandboxed `network: none` agents) |
+| ADR-024 | Cost Optimization Post-GCP Credits | Per-agent model tiering after free credits exhausted; orchestrator + ops drop to Flash, creative agents stay on Pro CustomTools, Anthropic fallback shifts Sonnet → Haiku for everyone except the research lead. $50/mo hard cap with ~$20–25/mo steady-state target |
+| ADR-025 | Active Memory Plugin Adoption | OpenClaw-bundled server-side RAG over existing QMD memory — zero local embedding infrastructure, enabled for `main`, `research-lead`, `chef-lead` (not `ops`) |
 
 See [docs/tech-decisions.md](docs/tech-decisions.md) for detailed ADR excerpts.
 
 ## Results
 
-- **22 Architectural Decision Records** documenting every significant technical choice
-- **130+ development tasks** across 8 completed phases with verification gates
+- **25 Architectural Decision Records** documenting every significant technical choice
+- **130+ development tasks** across 8 phases complete plus Phases 7E / 8 / 9 in active rollout and Phase 10 (Chef Antoine) operational
 - **6-layer security model** from network to supply chain
-- **5+ agents running** with modular domain team architecture
+- **Modular domain teams** — research-lead (Q), chef-lead (Chef Antoine + Kroger integration), ops, with workers spawned on demand
+- **Server-side RAG over QMD memory** via the OpenClaw Active Memory plugin — zero local embedding infrastructure
 - **Zero public ports** — true network invisibility via Tailscale mesh
 - **Weekly self-assessment cron** with cross-agent knowledge sharing
 - **Encrypted backups** automated via LUKS + systemd timers
-- **$10–29/month operating cost** on commodity hardware
+- **Cost-optimized model tiering post-GCP credits** — $50/mo hard cap, ~$20–25/mo steady state, per-agent Pro/Flash/Haiku assignments
 
 ## Project Status
 
@@ -160,6 +164,10 @@ See [docs/tech-decisions.md](docs/tech-decisions.md) for detailed ADR excerpts.
 | Phase 5: Polish & Observability | ✅ | Mermaid diagrams, CI, Langfuse |
 | Phase 6: Production Hardening | ✅ | Auto-updates, backup automation |
 | Phase 7: CC Runtime Engine | ✅ | Claude Code CLI integration, piped automation, build hooks |
+| Phase 7E: Q Intelligence Power-Up | 🚧 | Research-lead reasoning expansion, citation discipline, anti-fabrication hardening — integration testing |
+| Phase 8: Job Search Pipeline | 🚧 | PDF extraction, CV generation, Google Docs integration, validation runs in progress |
+| Phase 9: Market Intelligence | 🚧 | Supply chain intel, international emerging markets, competitive landscape reports |
+| Phase 10: Chef Antoine | ✅ | Culinary domain team operational since 2026-04-08, Kroger cart integration, multimodal inventory |
 
 ---
 

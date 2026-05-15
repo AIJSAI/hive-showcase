@@ -119,3 +119,84 @@ Mechanisms:
 - Verification gates catch common pitfalls (JSON syntax, doctor warnings).
 - Rollback is always available via git revert.
 - Slightly more ceremony per change — accepted trade-off for production stability.
+
+---
+
+## ADR-023: Chef Antoine + Kroger Cart Integration
+
+**Status**: Accepted
+**Context**: An external "Chef Antoine" chatbot was useful for recipe discovery and meal planning but had no persistence, no memory of past cooks, no inventory awareness, and no path from "recipe" to "ingredients in cart". Recipes were spread across five Google Docs with duplication. Kroger (parent of the operator's local Bakers store) offers free Public APIs including a Cart API that can programmatically add items to a customer's cart — the integration was sitting there waiting.
+
+**Decision**: Add a `chef-lead` domain team to Hive following the ADR-014 expansion protocol.
+
+- **Agent name**: `chef-lead` (domain team lead, no workers initially)
+- **Primary model**: `gemini-3.1-pro-preview-customtools` (creative reasoning + personality maintenance is load-bearing for a culinary mentor persona)
+- **Fallback chain** (per ADR-024): `gemini-2.5-pro` → `gpt-4.1` → `claude-haiku-4-5`
+- **Sandbox**: `mode: "all"`, `network: none` (consistent with all Hive agents)
+- **Discord**: Channel-bound to `#cooking`; also responds to DMs
+- **Kroger integration**: Pre-fetch pattern (same as email triage and the job search pipeline). Agent writes a request, host cron script calls the Kroger API, results land in workspace, agent reads. This keeps the agent inside its `network: none` sandbox.
+
+**Consequences**:
+- New domain team added without touching the existing architecture — proves out ADR-014's "add by config, not by refactor" claim.
+- Cart population is automated; checkout remains manual in the Kroger app for safety.
+- Recipe archive is searchable via QMD semantic search, with the same temporal-decay and hybrid-search guarantees as the other agents.
+- Multimodal inventory (photo-based pantry/fridge intake) is the first multimodal workload on the platform.
+
+---
+
+## ADR-024: Cost Optimization Post-GCP Credits
+
+**Status**: Accepted
+**Supersedes**: Sections of ADR-004 (LiteLLM cost control) and ADR-015 (API keys over subscription).
+
+**Context**: The $300 GCP credit program that covered Gemini API usage during Phases 3A–10 was exhausted in early April 2026. Every Gemini token now bills directly. The system was built under "use the best model because credits are free" assumptions — those assumptions no longer hold. Pre-optimization projection without credits was $55–119/month, which is unacceptable. The goal is **best value for spend**, not cheapest possible. The $50/month LiteLLM hard cap remains the safety net; target is ~$20–25/month under normal load.
+
+**Decision**: Retain high-capability models where creative or factual quality is load-bearing; downgrade the orchestrator and ops to Flash tier; replace Sonnet with Haiku 4.5 as the Anthropic fallback for every agent except the research lead.
+
+| Agent | Primary | Google fallback | OpenAI fallback | Anthropic fallback |
+|---|---|---|---|---|
+| `main` (Queenie) | `gemini-3-flash-preview` | `gemini-2.5-flash` | `gpt-4.1-mini` | `claude-haiku-4-5` |
+| `ops` | `gemini-3-flash-preview` | `gemini-2.5-flash` | `gpt-4.1-mini` | `claude-haiku-4-5` |
+| `chef-lead` | `gemini-3.1-pro-preview-customtools` | `gemini-2.5-pro` | `gpt-4.1` | `claude-haiku-4-5` |
+| `research-lead` (Q) | `gemini-3.1-pro-preview-customtools` | `gemini-2.5-pro` | `gpt-4.1` | `claude-sonnet-4-6` |
+
+Infrastructure fixes alongside the model changes:
+- `openclaw.json` cost metadata corrected (Gemini 2.5 models were previously marked $0 input/output, a relic of the credits era — LiteLLM budget tracking was undercounting spend).
+- Vertex AI routing order flipped to prefer the Gemini Dev API (which has a free tier) over Vertex (which doesn't).
+- Claude Haiku 4.5 registered as a new fallback target with `max_budget: 5.0/mo`.
+- All cross-group fallback chains now terminate in `claude-haiku-4-5` instead of `claude-sonnet-4-6`, with `claude-sonnet-4-6: [claude-haiku-4-5]` added as a new chain for Sonnet outage safety.
+
+**Consequences**:
+- Orchestrator and ops costs drop substantially without quality risk (their work is classification + dispatch).
+- Creative agents keep Pro CustomTools because that's where personality and cooking creativity actually live.
+- Fallback chains are no longer a spike risk during provider outages — Haiku 4.5 is 5x cheaper than Sonnet 4.6 with similar quality on routine work.
+- Q (research-lead) keeps Sonnet as its last-resort fallback because factual accuracy on career documents is load-bearing even when infrastructure is degraded.
+
+---
+
+## ADR-025: Active Memory Plugin Adoption
+
+**Status**: Accepted
+**Context**: Hive's memory surface has grown meaningfully. The work-repo auto-memory is at ~20 files today and projected to land in the 500–1000 range over twelve months as daily briefings, market intel, the job search pipeline, chef inventory, and Discord DMs accumulate. Agent workspace memory already spans `workspace-main/memory/`, `workspace-research-lead/memory/`, and `workspace-chef-lead/memory/`. QMD has a hybrid vector+text+MMR index with temporal decay. Despite all of this, recall misses still happen — agents answer without relevant prior context, or the operator has to re-supply background that's already in memory. The summary-based context-loading pattern degrades past ~50 files and becomes untenable past a few hundred.
+
+The previous working answer was the parked "Path A" exploration: stand up a local llama.cpp + embedding server on the Beelink and build a client-side RAG layer. OpenClaw 2026.4.12 (released 2026-04-12) added the Active Memory plugin, which solves the same problem server-side with zero local infrastructure.
+
+**Decision**: Enable the Active Memory plugin for `main`, `research-lead`, and `chef-lead`. Skip `ops`.
+
+Configuration:
+- `model: gemini-3-flash-preview` (lowest tier trusted for structured memory-selection work; matches ADR-024's cost-optimization principle).
+- `queryMode: recent` (latest user turn plus a small tail — the documented-recommended default).
+- `promptStyle: balanced`, `timeoutMs: 15000`, `maxSummaryChars: 220`.
+- `persistTranscripts: true` for the first review cycle so memory-selection quality can be audited, then flip back to `false` to save disk.
+
+Per-agent rationale:
+- **`research-lead` (Q)** — deep-reasoning work, long memory of investigations, market intel state, job search pipeline history. Highest-value recall surface.
+- **`chef-lead` (Chef Antoine)** — inventory from photos, past recipes, stored preferences, Kroger ops context. Memory-heavy interactive agent.
+- **`main` (Queenie)** — orchestrator that also handles Discord DMs directly. User-preference recall matters. Watch DM latency.
+- **`ops`** — scheduled health checks and email triage; mostly stateless. No benefit.
+
+**Consequences**:
+- Server-side RAG over existing QMD memory — no local embedding infrastructure to build or maintain.
+- Closes the recall-miss class of failures without requiring users to say "search memory" first.
+- Replaces the parked "Path A" Gemma 4 exploration with a zero-infrastructure alternative.
+- Active Memory runs a blocking sub-agent call before each primary reply — DM latency increases marginally; watch and revisit if it bites.
