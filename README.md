@@ -1,28 +1,28 @@
-# Hive — Self-Hosted Multi-Agent AI Infrastructure
+# Hive: Self-Hosted Multi-Agent AI Infrastructure
 
-> Production multi-agent AI system running on commodity hardware with defense-in-depth security, automated workflows, and self-improving agents.
+> Production multi-agent AI system with a 6-layer defense-in-depth security model, depth-2 agent orchestration, automated workflows, and self-improving agents.
 
 ---
 
 **This repository documents the architecture and design decisions for Hive. Source code is available upon request for interview processes.**
 
-📄 [Portfolio Case Study](https://jamesshehan.dev/projects/hive) · 📝 [Blog Deep Dive](https://jamesshehan.dev/blog/architecture-decisions-self-hosting-multi-agent-ai) · 📬 [Request Source Access](mailto:james@jamesshehan.dev?subject=Source%20Access%20Request%20—%20Hive)
+📄 [Portfolio Case Study](https://jamesshehan.dev/projects/hive) · 📝 [Blog Deep Dive](https://jamesshehan.dev/blog/architecture-decisions-self-hosting-multi-agent-ai) · 📬 [Request Source Access](mailto:james@jamesshehan.dev?subject=Source%20Access%20Request%20-%20Hive)
 
 ---
 
 ## Problem
 
-Cloud AI agent services (Azure AI Agent Service, AWS Bedrock Agents) charge per-interaction, offer limited customization, and create vendor lock-in. For a TPM/SA building personal AI infrastructure — automated research, email triage, cron-driven workflows, cross-agent knowledge sharing — cloud costs compound quickly, observability is opaque, and multi-agent orchestration is constrained by provider abstractions.
+Cloud AI agent services (Azure AI Agent Service, AWS Bedrock Agents) charge per-interaction, offer limited customization, and create vendor lock-in. For a self-hosted multi-agent platform spanning automated research, email triage, cron-driven workflows, and cross-agent knowledge sharing, cloud spend compounds quickly, observability is opaque, and multi-agent orchestration is constrained by provider abstractions.
 
-The challenge: build a production multi-agent system on a $350 mini PC that matches the reliability, security, and capability of cloud-hosted alternatives — from network security through agent sandboxing to self-improving behavior.
+The challenge: build a production multi-agent system on self-hosted single-node hardware that matches the reliability, security, and capability of cloud-hosted alternatives, from network security through agent sandboxing to self-improving behavior.
 
 ## Architecture
 
-Hive runs on a single Beelink SER5 mini PC with a **6-layer security model**, modular agent teams, and zero public-facing ports.
+Hive runs as a single-node deployment with a **6-layer security model**, modular agent teams, and zero public-facing ports.
 
 ```mermaid
 graph TB
-    subgraph Beelink["Beelink SER5 — Ubuntu Server 24.04 LTS"]
+    subgraph Host["Single-Node Host: Ubuntu Server 24.04 LTS"]
         subgraph Gateway["OpenClaw Gateway (port 18789, loopback only)"]
             subgraph Core["Core Agents"]
                 main["main<br/>Orchestrator<br/>Gemini 3.1 Pro"]
@@ -45,7 +45,7 @@ graph TB
             litellm["LiteLLM Proxy<br/>+ Redis Cache"]
         end
         subgraph Security["Security Layers"]
-            ipt["iptables — DROP all,<br/>allow tailscale0 only"]
+            ipt["iptables: DROP all,<br/>allow tailscale0 only"]
             op["1Password CLI<br/>Zero plaintext"]
             luks["LUKS Full-Disk<br/>Encryption"]
         end
@@ -55,7 +55,7 @@ graph TB
     Gateway -->|Tailscale mesh| Mac["Mac<br/>VS Code SSH"]
     Gateway --> Discord["Discord<br/>Channels"]
 
-    style Beelink fill:#1a1a2e,stroke:#e94560,color:#fff
+    style Host fill:#1a1a2e,stroke:#e94560,color:#fff
     style Gateway fill:#16213e,stroke:#0f3460,color:#fff
     style Core fill:#0f3460,stroke:#533483,color:#fff
     style Teams fill:#0f3460,stroke:#533483,color:#fff
@@ -68,8 +68,8 @@ graph TB
 |-----------|----------|
 | **OpenClaw Gateway** | Agent lifecycle, session management, tool routing, bindings to Discord/CLI/webhooks |
 | **Orchestrator (main)** | Depth-1 agent: delegates to domain team leads, manages config, broad tool access |
-| **Domain Team Leads** | Depth-1 specialists: research, startup analysis, job search — each spawns depth-2 workers |
-| **QMD Memory** | Hybrid search (BM25 + vector embeddings + MMR reranking) with temporal decay — zero API cost |
+| **Domain Team Leads** | Depth-1 specialists (research, startup analysis, job search), each spawning depth-2 workers |
+| **QMD Memory** | Hybrid search (BM25 + vector embeddings + MMR reranking) with temporal decay; zero API cost |
 | **LiteLLM Proxy** | Model routing with hard monthly budget caps, per-model spend tracking, semantic caching, cross-group fallback |
 | **Docker Sandboxes** | Per-agent isolation with `--cap-drop=ALL`, `--security-opt=no-new-privileges`, no network access |
 
@@ -78,7 +78,7 @@ graph TB
 | Technology | Role | Why This Choice |
 |-----------|------|-----------------|
 | Ubuntu Server 24.04 LTS | Host OS | Headless, LTS support, unattended security upgrades |
-| Beelink SER5 | Hardware | AMD Ryzen 5 5500U (6C/12T), 28GB RAM, 500GB NVMe — $350, silent, low power |
+| Single-node host | Hardware | AMD Ryzen 5 5500U (6C/12T), 28GB RAM, 500GB NVMe |
 | OpenClaw | Agent framework | Multi-agent orchestration, depth-2 nesting, Docker sandboxing, session management |
 | Google Gemini API | Primary LLM | Cost-effective (free tier for development), high quality, tool-use capable |
 | LiteLLM + Redis | Model proxy + cache | Multi-provider routing, budget caps, semantic caching, fallback chains |
@@ -108,17 +108,17 @@ graph TB
 
 **Challenge**: `--cap-drop=ALL` removes `DAC_OVERRIDE` (the capability that lets root bypass file permissions). Agent processes running as non-root inside containers can't write to workspace directories mounted from the host, even with bind mounts.
 
-**Solution**: `chmod 777` on workspace directories before container launch (ADR-012). This is acceptable because the sandbox's security boundary is the container itself (no network, dropped capabilities, no-new-privileges), not filesystem permissions within the container. The workspace is agent-scoped — cross-agent data isolation is enforced by separate bind mounts, not POSIX permissions.
+**Solution**: `chmod 777` on workspace directories before container launch (ADR-012). This is acceptable because the sandbox's security boundary is the container itself (no network, dropped capabilities, no-new-privileges), not filesystem permissions within the container. The workspace is agent-scoped: cross-agent data isolation is enforced by separate bind mounts, not POSIX permissions.
 
 ### 2. Elevated Exec Deadlock
 
-**Challenge**: Setting `elevatedDefault: "on"` routes ALL exec calls for ALL agents to the host (requiring manual approval via Discord). With 5+ agents running, the approval queue becomes a bottleneck, and if Discord is unreachable, all agents deadlock — no exec at all.
+**Challenge**: Setting `elevatedDefault: "on"` routes ALL exec calls for ALL agents to the host (requiring manual approval via Discord). With 5+ agents running, the approval queue becomes a bottleneck, and if Discord is unreachable, all agents deadlock with no exec at all.
 
-**Solution**: Keep `elevatedDefault` off (omitted from config). Agents exec inside their Docker sandbox by default (no approval needed). Only the orchestrator (`main`) can request elevated (host-level) exec, gated by per-command approval via Discord. Anti-pattern documented: never set per-agent `elevated.enabled: true` on sandboxed agents — it has the same deadlocking effect.
+**Solution**: Keep `elevatedDefault` off (omitted from config). Agents exec inside their Docker sandbox by default (no approval needed). Only the orchestrator (`main`) can request elevated (host-level) exec, gated by per-command approval via Discord. Anti-pattern documented: never set per-agent `elevated.enabled: true` on sandboxed agents, since it has the same deadlocking effect.
 
 ### 3. Secrets on a Budget
 
-**Challenge**: 1Password Individual plan doesn't support service accounts or Connect Server. Production agent frameworks need credentials injected at runtime without human interaction — but `op` CLI requires either an interactive session or specific auth mechanisms.
+**Challenge**: 1Password Individual plan doesn't support service accounts or Connect Server. Production agent frameworks need credentials injected at runtime without human interaction, but `op` CLI requires either an interactive session or specific auth mechanisms.
 
 **Solution**: Hybrid secrets model (ADR-003). systemd `EnvironmentFile` loads credentials from a tmpfs-backed file (`/run/openclaw-credentials/.env`) populated at boot via `op run`. Config uses `${ENV_VAR}` substitution for fields that don't support OpenClaw's native SecretRef. Net result: zero plaintext secrets on persistent disk, runtime injection without service accounts.
 
@@ -133,8 +133,8 @@ graph TB
 | ADR-016 | Adaptive Self-Improvement | Weekly self-assessment cron, tiered config change autonomy, cross-agent knowledge sharing |
 | ADR-020 | Runtime Change Protocol | Structured workflow for config changes: propose → verify → apply → test → commit |
 | ADR-023 | Chef Antoine + Kroger Integration | New `chef-lead` domain team via the ADR-014 expansion protocol; Kroger Cart API integration via host cron pre-fetch pattern (consistent with sandboxed `network: none` agents) |
-| ADR-024 | Cost Optimization Post-GCP Credits | Per-agent model tiering after free credits exhausted; orchestrator + ops drop to Flash, creative agents stay on Pro CustomTools, Anthropic fallback shifts Sonnet → Haiku for everyone except the research lead. $50/mo hard cap with ~$20–25/mo steady-state target |
-| ADR-025 | Active Memory Plugin Adoption | OpenClaw-bundled server-side RAG over existing QMD memory — zero local embedding infrastructure, enabled for `main`, `research-lead`, `chef-lead` (not `ops`) |
+| ADR-024 | Cost Optimization Post-GCP Credits | Per-agent model tiering holds spend under a hard monthly ceiling after free credits were exhausted: orchestrator and ops drop to Flash, creative agents stay on Pro CustomTools, and the Anthropic fallback shifts Sonnet to Haiku for every agent except the research lead |
+| ADR-025 | Active Memory Plugin Adoption | OpenClaw-bundled server-side RAG over existing QMD memory, with zero local embedding infrastructure, enabled for `main`, `research-lead`, `chef-lead` (not `ops`) |
 
 See [docs/tech-decisions.md](docs/tech-decisions.md) for detailed ADR excerpts.
 
@@ -143,12 +143,12 @@ See [docs/tech-decisions.md](docs/tech-decisions.md) for detailed ADR excerpts.
 - **25 Architectural Decision Records** documenting every significant technical choice
 - **130+ development tasks** across 8 phases complete plus Phases 7E / 8 / 9 in active rollout and Phase 10 (Chef Antoine) operational
 - **6-layer security model** from network to supply chain
-- **Modular domain teams** — research-lead (Q), chef-lead (Chef Antoine + Kroger integration), ops, with workers spawned on demand
-- **Server-side RAG over QMD memory** via the OpenClaw Active Memory plugin — zero local embedding infrastructure
-- **Zero public ports** — true network invisibility via Tailscale mesh
+- **Modular domain teams**: research-lead (Q), chef-lead (Chef Antoine + Kroger integration), ops, with workers spawned on demand
+- **Server-side RAG over QMD memory** via the OpenClaw Active Memory plugin, with zero local embedding infrastructure
+- **Zero public ports**: true network invisibility via Tailscale mesh
 - **Weekly self-assessment cron** with cross-agent knowledge sharing
 - **Encrypted backups** automated via LUKS + systemd timers
-- **Cost-optimized model tiering post-GCP credits** — $50/mo hard cap, ~$20–25/mo steady state, per-agent Pro/Flash/Haiku assignments
+- **Cost-governed model tiering post-GCP credits**: per-agent Pro/Flash/Haiku assignments hold spend under a hard monthly ceiling
 
 ## Project Status
 
@@ -164,7 +164,7 @@ See [docs/tech-decisions.md](docs/tech-decisions.md) for detailed ADR excerpts.
 | Phase 5: Polish & Observability | ✅ | Mermaid diagrams, CI, Langfuse |
 | Phase 6: Production Hardening | ✅ | Auto-updates, backup automation |
 | Phase 7: CC Runtime Engine | ✅ | Claude Code CLI integration, piped automation, build hooks |
-| Phase 7E: Q Intelligence Power-Up | 🚧 | Research-lead reasoning expansion, citation discipline, anti-fabrication hardening — integration testing |
+| Phase 7E: Q Intelligence Power-Up | 🚧 | Research-lead reasoning expansion, citation discipline, anti-fabrication hardening; integration testing |
 | Phase 8: Job Search Pipeline | 🚧 | PDF extraction, CV generation, Google Docs integration, validation runs in progress |
 | Phase 9: Market Intelligence | 🚧 | Supply chain intel, international emerging markets, competitive landscape reports |
 | Phase 10: Chef Antoine | ✅ | Culinary domain team operational since 2026-04-08, Kroger cart integration, multimodal inventory |
@@ -173,4 +173,4 @@ See [docs/tech-decisions.md](docs/tech-decisions.md) for detailed ADR excerpts.
 
 **Built by [James Shehan](https://jamesshehan.dev)** · TPM / Solutions Architect
 
-📬 [Request source code access](mailto:james@jamesshehan.dev?subject=Source%20Access%20Request%20—%20Hive) for interview review
+📬 [Request source code access](mailto:james@jamesshehan.dev?subject=Source%20Access%20Request%20-%20Hive) for interview review
