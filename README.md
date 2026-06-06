@@ -4,7 +4,7 @@
 
 ---
 
-**This repository documents the architecture and design decisions for Hive. Source code is available upon request for interview processes.**
+**This repository documents the architecture and design decisions for Hive. Source code is available on request.**
 
 📄 [Portfolio Case Study](https://jamesshehan.dev/projects/hive) · 📝 [Blog Deep Dive](https://jamesshehan.dev/blog/architecture-decisions-self-hosting-multi-agent-ai) · 📬 [Request Source Access](mailto:james@jamesshehan.dev?subject=Source%20Access%20Request%20-%20Hive)
 
@@ -30,8 +30,7 @@ graph TB
             end
             subgraph Teams["Domain Teams (incremental)"]
                 research["research-lead<br/>↓ workers"]
-                startup["startup-lead<br/>↓ workers"]
-                jobs["jobs-lead<br/>↓ workers"]
+                market["market-research-lead<br/>↓ workers"]
             end
             subgraph Subs["Subsystems"]
                 qmd["QMD Memory<br/>BM25 + vector + reranking"]
@@ -68,7 +67,7 @@ graph TB
 |-----------|----------|
 | **OpenClaw Gateway** | Agent lifecycle, session management, tool routing, bindings to Discord/CLI/webhooks |
 | **Orchestrator (main)** | Depth-1 agent: delegates to domain team leads, manages config, broad tool access |
-| **Domain Team Leads** | Depth-1 specialists (research, startup analysis, job search), each spawning depth-2 workers |
+| **Domain Team Leads** | Depth-1 specialists (research, market research), each spawning depth-2 workers |
 | **QMD Memory** | Hybrid search (BM25 + vector embeddings + MMR reranking) with temporal decay; zero API cost |
 | **LiteLLM Proxy** | Model routing with hard monthly budget caps, per-model spend tracking, semantic caching, cross-group fallback |
 | **Docker Sandboxes** | Per-agent isolation with `--cap-drop=ALL`, `--security-opt=no-new-privileges`, no network access |
@@ -78,7 +77,7 @@ graph TB
 | Technology | Role | Why This Choice |
 |-----------|------|-----------------|
 | Ubuntu Server 24.04 LTS | Host OS | Headless, LTS support, unattended security upgrades |
-| Single-node host | Hardware | AMD Ryzen 5 5500U (6C/12T), 28GB RAM, 500GB NVMe |
+| Single-node host | Deployment target | AMD Ryzen 5 5500U (6C/12T), 28GB RAM, 500GB NVMe |
 | OpenClaw | Agent framework | Multi-agent orchestration, depth-2 nesting, Docker sandboxing, session management |
 | Google Gemini API | Primary LLM | Cost-effective (free tier for development), high quality, tool-use capable |
 | LiteLLM + Redis | Model proxy + cache | Multi-provider routing, budget caps, semantic caching, fallback chains |
@@ -94,7 +93,7 @@ graph TB
 
 | Layer | Control | Implementation |
 |-------|---------|----------------|
-| **1. Network Invisibility** | Zero public ports | iptables INPUT DROP + Tailscale-only access |
+| **1. Network Isolation** | Zero public ports | iptables INPUT DROP + Tailscale-only access |
 | **2. Secrets Management** | No plaintext credentials | 1Password CLI + tmpfs env file via systemd EnvironmentFile |
 | **3. Access Control** | Per-user, per-agent isolation | DM pairing, session scoping, mention-gating, layered tool policies |
 | **3.5. Prompt Injection** | Untrusted content isolation | Sandboxed agents process external content; denied `sessions_send`/`sessions_spawn` |
@@ -141,11 +140,11 @@ See [docs/tech-decisions.md](docs/tech-decisions.md) for detailed ADR excerpts.
 ## Results
 
 - **25 Architectural Decision Records** documenting every significant technical choice
-- **130+ development tasks** across 8 phases complete plus Phases 7E / 8 / 9 in active rollout and Phase 10 (Chef Antoine) operational
+- **130+ development tasks** across multiple completed phases; additional phases in active rollout
 - **6-layer security model** from network to supply chain
-- **Modular domain teams**: research-lead (Q), chef-lead (Chef Antoine + Kroger integration), ops, with workers spawned on demand
+- **Modular domain teams**: research-lead, market-research-lead, chef-lead (Chef Antoine + Kroger integration), ops, with workers spawned on demand
 - **Server-side RAG over QMD memory** via the OpenClaw Active Memory plugin, with zero local embedding infrastructure
-- **Zero public ports**: true network invisibility via Tailscale mesh
+- **Zero public ports**: reachable only over the Tailscale mesh; no inbound exposure on any public interface
 - **Weekly self-assessment cron** with cross-agent knowledge sharing
 - **Encrypted backups** automated via LUKS + systemd timers
 - **Cost-governed model tiering post-GCP credits**: per-agent Pro/Flash/Haiku assignments hold spend under a hard monthly ceiling
@@ -165,7 +164,7 @@ See [docs/tech-decisions.md](docs/tech-decisions.md) for detailed ADR excerpts.
 | Phase 6: Production Hardening | ✅ | Auto-updates, backup automation |
 | Phase 7: CC Runtime Engine | ✅ | Claude Code CLI integration, piped automation, build hooks |
 | Phase 7E: Q Intelligence Power-Up | 🚧 | Research-lead reasoning expansion, citation discipline, anti-fabrication hardening; integration testing |
-| Phase 8: Job Search Pipeline | 🚧 | PDF extraction, CV generation, Google Docs integration, validation runs in progress |
+| Phase 8: Research Pipeline Expansion | 🚧 | Extended document extraction, structured output generation, Google Docs integration, validation runs in progress |
 | Phase 9: Market Intelligence | 🚧 | Supply chain intel, international emerging markets, competitive landscape reports |
 | Phase 10: Chef Antoine | ✅ | Culinary domain team operational since 2026-04-08, Kroger cart integration, multimodal inventory |
 
@@ -173,4 +172,4 @@ See [docs/tech-decisions.md](docs/tech-decisions.md) for detailed ADR excerpts.
 
 **Built by [James Shehan](https://jamesshehan.dev)** · TPM / Solutions Architect
 
-📬 [Request source code access](mailto:james@jamesshehan.dev?subject=Source%20Access%20Request%20-%20Hive) for interview review
+📬 [Request source access](mailto:james@jamesshehan.dev?subject=Source%20Access%20Request%20-%20Hive)
