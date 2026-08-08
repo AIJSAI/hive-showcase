@@ -25,7 +25,7 @@ graph TB
     subgraph Host["Single-Node Host: Ubuntu Server 24.04 LTS"]
         subgraph Gateway["OpenClaw Gateway (port 18789, loopback only)"]
             subgraph Core["Core Agents"]
-                main["main<br/>Orchestrator<br/>Gemini 3.1 Pro"]
+                main["main<br/>Orchestrator<br/>Gemini 3 Flash"]
                 ops["ops<br/>Alert Relay<br/>Gemini 3 Flash"]
             end
             subgraph Teams["Domain Teams (incremental)"]
