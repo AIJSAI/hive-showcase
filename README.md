@@ -4,9 +4,9 @@
 
 ---
 
-**This repository documents the architecture and design decisions for Hive. Source code is available on request.**
+**This repository documents the architecture and design decisions for Hive. The implementation is private.**
 
-📄 [Portfolio Case Study](https://jamesshehan.dev/projects/hive) · 📝 [Blog Deep Dive](https://jamesshehan.dev/blog/architecture-decisions-self-hosting-multi-agent-ai) · 📬 [Request Source Access](mailto:james@jamesshehan.dev?subject=Source%20Access%20Request%20-%20Hive)
+📄 [Portfolio Case Study](https://jamesshehan.dev/projects/hive) · 📝 [Blog Post](https://jamesshehan.dev/blog/architecture-decisions-self-hosting-multi-agent-ai)
 
 ---
 
@@ -172,4 +172,3 @@ See [docs/tech-decisions.md](docs/tech-decisions.md) for detailed ADR excerpts.
 
 **Built by [James Shehan](https://jamesshehan.dev)** · TPM / Solutions Architect
 
-📬 [Request source access](mailto:james@jamesshehan.dev?subject=Source%20Access%20Request%20-%20Hive)
