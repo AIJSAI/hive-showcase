@@ -1,6 +1,6 @@
 # Hive: Self-Hosted Multi-Agent AI Infrastructure
 
-> Production multi-agent AI system with a 6-layer defense-in-depth security model, depth-2 agent orchestration, automated workflows, and self-improving agents.
+> Production multi-agent AI system with defense-in-depth security layered from network to supply chain, depth-2 agent orchestration, automated workflows, and self-improving agents.
 
 ---
 
@@ -18,7 +18,7 @@ The challenge: build a production multi-agent system on self-hosted single-node 
 
 ## Architecture
 
-Hive runs as a single-node deployment with a **6-layer security model**, modular agent teams, and zero public-facing ports.
+Hive runs as a single-node deployment with **security layered in depth**, modular agent teams, and zero public-facing ports.
 
 ```mermaid
 graph TB
@@ -89,7 +89,7 @@ graph TB
 | LUKS + TPM2 | Disk encryption | Full-disk encryption with auto-unseal via TPM2 |
 | systemd (user units) | Service management | `loginctl enable-linger` for persistent agent processes |
 
-## 6-Layer Security Model
+## Security Model: Defense in Depth
 
 | Layer | Control | Implementation |
 |-------|---------|----------------|
@@ -141,7 +141,7 @@ See [docs/tech-decisions.md](docs/tech-decisions.md) for detailed ADR excerpts.
 
 - **25 Architectural Decision Records** documenting every significant technical choice
 - **130+ development tasks** across multiple completed phases; additional phases in active rollout
-- **6-layer security model** from network to supply chain
+- **Security layered from network to supply chain**
 - **Modular domain teams**: research-lead, market-research-lead, chef-lead (Chef Antoine + Kroger integration), ops, with workers spawned on demand
 - **Server-side RAG over QMD memory** via the OpenClaw Active Memory plugin, with zero local embedding infrastructure
 - **Zero public ports**: reachable only over the Tailscale mesh; no inbound exposure on any public interface
@@ -155,7 +155,7 @@ See [docs/tech-decisions.md](docs/tech-decisions.md) for detailed ADR excerpts.
 |-------|--------|-------------|
 | Phase 0: Foundation | ✅ | Hardware, OS, network, Tailscale mesh |
 | Phase 1: Core OpenClaw | ✅ | Gateway install, config, agent setup |
-| Phase 2: Security Hardening | ✅ | 6-layer security, 1Password, LUKS |
+| Phase 2: Security Hardening | ✅ | Layered security, 1Password, LUKS |
 | Phase 3A: Multi-Agent | ✅ | Domain teams, depth-2 nesting, tool policies |
 | Phase 3B: Memory & Automation | ✅ | QMD, cron scheduler, webhooks |
 | Phase 3C: Extensions | ✅ | LiteLLM, voice pipeline, browser automation |
