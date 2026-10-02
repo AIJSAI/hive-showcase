@@ -1,12 +1,12 @@
 # Hive: Self-Hosted Multi-Agent AI Infrastructure
 
-> Production multi-agent AI system with defense-in-depth security layered from network to supply chain, depth-2 agent orchestration, automated workflows, and self-improving agents.
+> A self-hosted multi-agent platform I built for my own research, email triage and scheduled workflows, with per-agent Docker sandboxing, zero public ports and a hard monthly spending ceiling. Development is paused.
 
 ---
 
 **This repository documents the architecture and design decisions for Hive. The implementation is private.**
 
-📄 [Portfolio Case Study](https://jamesshehan.dev/projects/hive) · 📝 [Blog Post](https://jamesshehan.dev/blog/architecture-decisions-self-hosting-multi-agent-ai)
+[Portfolio case study](https://jamesshehan.dev/projects/hive) · [Blog post](https://jamesshehan.dev/blog/architecture-decisions-self-hosting-multi-agent-ai)
 
 ---
 
@@ -14,7 +14,7 @@
 
 Cloud AI agent services (Azure AI Agent Service, AWS Bedrock Agents) charge per-interaction, offer limited customization, and create vendor lock-in. For a self-hosted multi-agent platform spanning automated research, email triage, cron-driven workflows, and cross-agent knowledge sharing, cloud spend compounds quickly, observability is opaque, and multi-agent orchestration is constrained by provider abstractions.
 
-The challenge: build a production multi-agent system on self-hosted single-node hardware that matches the reliability, security, and capability of cloud-hosted alternatives, from network security through agent sandboxing to self-improving behavior.
+The challenge: build a multi-agent system on one self-hosted server that owns its own security, cost governance, memory recall and uptime.
 
 ## Architecture
 
@@ -23,7 +23,7 @@ Hive runs as a single-node deployment with **security layered in depth**, modula
 ```mermaid
 graph TB
     subgraph Host["Single-Node Host: Ubuntu Server 24.04 LTS"]
-        subgraph Gateway["OpenClaw Gateway (port 18789, loopback only)"]
+        subgraph Gateway["OpenClaw Gateway (loopback only)"]
             subgraph Core["Core Agents"]
                 main["main<br/>Orchestrator<br/>Gemini 3 Flash"]
                 ops["ops<br/>Alert Relay<br/>Gemini 3 Flash"]
@@ -51,7 +51,7 @@ graph TB
     end
 
     APIs["External APIs<br/>Gemini · Anthropic<br/>ElevenLabs · Brave"] -->|HTTPS outbound| Gateway
-    Gateway -->|Tailscale mesh| Mac["Mac<br/>VS Code SSH"]
+    Gateway -->|Tailscale mesh| Mac["Admin workstation<br/>(Tailscale SSH)"]
     Gateway --> Discord["Discord<br/>Channels"]
 
     style Host fill:#1a1a2e,stroke:#e94560,color:#fff
@@ -77,7 +77,7 @@ graph TB
 | Technology | Role | Why This Choice |
 |-----------|------|-----------------|
 | Ubuntu Server 24.04 LTS | Host OS | Headless, LTS support, unattended security upgrades |
-| Single-node host | Deployment target | AMD Ryzen 5 5500U (6C/12T), 28GB RAM, 500GB NVMe |
+| Single-node host | Deployment target | One self-hosted server |
 | OpenClaw | Agent framework | Multi-agent orchestration, depth-2 nesting, Docker sandboxing, session management |
 | Google Gemini API | Primary LLM | Cost-effective (free tier for development), high quality, tool-use capable |
 | LiteLLM + Redis | Model proxy + cache | Multi-provider routing, budget caps, semantic caching, fallback chains |
@@ -107,7 +107,7 @@ graph TB
 
 **Challenge**: `--cap-drop=ALL` removes `DAC_OVERRIDE` (the capability that lets root bypass file permissions). Agent processes running as non-root inside containers can't write to workspace directories mounted from the host, even with bind mounts.
 
-**Solution**: `chmod 777` on workspace directories before container launch (ADR-012). This is acceptable because the sandbox's security boundary is the container itself (no network, dropped capabilities, no-new-privileges), not filesystem permissions within the container. The workspace is agent-scoped: cross-agent data isolation is enforced by separate bind mounts, not POSIX permissions.
+**Solution**: Accepted standard Docker over rootless for a single-user machine and made the container the boundary: no network, dropped capabilities and no-new-privileges, with each agent's workspace on its own bind mount (ADR-012).
 
 ### 2. Elevated Exec Deadlock
 
@@ -119,7 +119,7 @@ graph TB
 
 **Challenge**: 1Password Individual plan doesn't support service accounts or Connect Server. Production agent frameworks need credentials injected at runtime without human interaction, but `op` CLI requires either an interactive session or specific auth mechanisms.
 
-**Solution**: Hybrid secrets model (ADR-003). systemd `EnvironmentFile` loads credentials from a tmpfs-backed file (`/run/openclaw-credentials/.env`) populated at boot via `op run`. Config uses `${ENV_VAR}` substitution for fields that don't support OpenClaw's native SecretRef. Net result: zero plaintext secrets on persistent disk, runtime injection without service accounts.
+**Solution**: Hybrid secrets model (ADR-003). systemd `EnvironmentFile` loads credentials from a tmpfs-backed file populated at boot via `op run`. Config uses `${ENV_VAR}` substitution for fields that don't support OpenClaw's native SecretRef. Net result: zero plaintext secrets on persistent disk, runtime injection without service accounts.
 
 ## Key Decisions
 
@@ -127,46 +127,43 @@ graph TB
 |-----|----------|-----------|
 | ADR-001 | OpenClaw-Native Architecture | Custom agent framework provides depth-2 nesting, Discord integration, and Docker sandboxing that cloud alternatives lack |
 | ADR-003 | 1Password Hybrid Secrets | Budget-friendly secrets management: `op run` + tmpfs + env substitution, zero plaintext on disk |
-| ADR-012 | Docker Privilege Model | `--cap-drop=ALL` + `chmod 777` workspace: sandbox boundary is the container, not POSIX permissions |
+| ADR-012 | Docker Privilege Model | Standard Docker with --cap-drop=ALL: the sandbox boundary is the container |
 | ADR-014 | Modular Domain Team Architecture | Teams added incrementally without architectural changes; depth-2 nesting (lead → workers) |
 | ADR-016 | Adaptive Self-Improvement | Weekly self-assessment cron, tiered config change autonomy, cross-agent knowledge sharing |
 | ADR-020 | Runtime Change Protocol | Structured workflow for config changes: propose → verify → apply → test → commit |
-| ADR-023 | Chef Antoine + Kroger Integration | New `chef-lead` domain team via the ADR-014 expansion protocol; Kroger Cart API integration via host cron pre-fetch pattern (consistent with sandboxed `network: none` agents) |
-| ADR-024 | Cost Optimization Post-GCP Credits | Per-agent model tiering holds spend under a hard monthly ceiling after free credits were exhausted: orchestrator and ops drop to Flash, creative agents stay on Pro CustomTools, and the Anthropic fallback shifts Sonnet to Haiku for every agent except the research lead |
-| ADR-025 | Active Memory Plugin Adoption | OpenClaw-bundled server-side RAG over existing QMD memory, with zero local embedding infrastructure, enabled for `main`, `research-lead`, `chef-lead` (not `ops`) |
+| ADR-024 | Cost Optimization Post-GCP Credits | Per-agent model tiering holds spend under a hard monthly ceiling after free credits were exhausted: orchestrator and ops drop to Flash, leads whose output quality depends on the model stay on Pro, and the Anthropic fallback shifts Sonnet to Haiku for every agent except the research lead |
+| ADR-025 | Active Memory Plugin Adoption | Retrieval over the existing QMD memory before each reply, enabled for main and the domain leads (not ops) |
 
 See [docs/tech-decisions.md](docs/tech-decisions.md) for detailed ADR excerpts.
 
 ## Results
 
 - **25 Architectural Decision Records** documenting every significant technical choice
-- **130+ development tasks** across multiple completed phases; additional phases in active rollout
+- **130+ development tasks** across the completed phases; development is paused
 - **Security layered from network to supply chain**
-- **Modular domain teams**: research-lead, market-research-lead, chef-lead (Chef Antoine + Kroger integration), ops, with workers spawned on demand
-- **Server-side RAG over QMD memory** via the OpenClaw Active Memory plugin, with zero local embedding infrastructure
+- **Modular domain teams**: research-lead, market-research-lead, ops, with workers spawned on demand
+- **Retrieval over QMD memory before each reply** via the OpenClaw Active Memory plugin
 - **Zero public ports**: reachable only over the Tailscale mesh; no inbound exposure on any public interface
 - **Weekly self-assessment cron** with cross-agent knowledge sharing
-- **Encrypted backups** automated via LUKS + systemd timers
+- **Encrypted disks (LUKS + TPM2) and automated backups on systemd timers**
 - **Cost-governed model tiering post-GCP credits**: per-agent Pro/Flash/Haiku assignments hold spend under a hard monthly ceiling
 
 ## Project Status
 
 | Phase | Status | Description |
 |-------|--------|-------------|
-| Phase 0: Foundation | ✅ | Hardware, OS, network, Tailscale mesh |
-| Phase 1: Core OpenClaw | ✅ | Gateway install, config, agent setup |
-| Phase 2: Security Hardening | ✅ | Layered security, 1Password, LUKS |
-| Phase 3A: Multi-Agent | ✅ | Domain teams, depth-2 nesting, tool policies |
-| Phase 3B: Memory & Automation | ✅ | QMD, cron scheduler, webhooks |
-| Phase 3C: Extensions | ✅ | LiteLLM, voice pipeline, browser automation |
-| Phase 4: Expansion | ✅ | Firewall hardening, skill deployment |
-| Phase 5: Polish & Observability | ✅ | Mermaid diagrams, CI, Langfuse |
-| Phase 6: Production Hardening | ✅ | Auto-updates, backup automation |
-| Phase 7: CC Runtime Engine | ✅ | Claude Code CLI integration, piped automation, build hooks |
-| Phase 7E: Q Intelligence Power-Up | 🚧 | Research-lead reasoning expansion, citation discipline, anti-fabrication hardening; integration testing |
-| Phase 8: Research Pipeline Expansion | 🚧 | Extended document extraction, structured output generation, Google Docs integration, validation runs in progress |
-| Phase 9: Market Intelligence | 🚧 | Supply chain intel, international emerging markets, competitive landscape reports |
-| Phase 10: Chef Antoine | ✅ | Culinary domain team operational since 2026-04-08, Kroger cart integration, multimodal inventory |
+| Phase 0: Foundation | Done | Hardware, OS, network, Tailscale mesh |
+| Phase 1: Core OpenClaw | Done | Gateway install, config, agent setup |
+| Phase 2: Security Hardening | Done | Layered security, 1Password, LUKS |
+| Phase 3A: Multi-Agent | Done | Domain teams, depth-2 nesting, tool policies |
+| Phase 3B: Memory & Automation | Done | QMD, cron scheduler, webhooks |
+| Phase 3C: Extensions | Done | LiteLLM, voice pipeline, browser automation |
+| Phase 4: Expansion | Done | Firewall hardening, skill deployment |
+| Phase 5: Polish & Observability | Done | Mermaid diagrams, CI, Langfuse |
+| Phase 6: Production Hardening | Done | Auto-updates, backup automation |
+| Phase 7: CC Runtime Engine | Done | Claude Code CLI integration, piped automation, build hooks |
+| Phase 7E: Q Intelligence Power-Up | Paused | Research-lead reasoning expansion, citation discipline, anti-fabrication hardening; integration testing |
+| Phase 8: Research Pipeline Expansion | Paused | Extended document extraction, structured output generation, Google Docs integration, validation runs in progress |
 
 ---
 
