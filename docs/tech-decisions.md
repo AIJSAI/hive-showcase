@@ -63,11 +63,11 @@ This document contains excerpts from the project's Architecture Decision Records
 ## ADR-014: Modular Domain Team Architecture
 
 **Status**: Accepted  
-**Context**: The initial plan defined 4 fixed agents (main, ops, research, startup). As requirements grew, this rigid structure couldn't accommodate new domains (job search, email triage, content creation) without architectural changes.
+**Context**: The initial plan defined 4 fixed agents (main, ops, research and one domain agent). As requirements grew, this rigid structure couldn't accommodate new domains (email triage, content creation, recipe planning) without architectural changes.
 
 **Decision**: Shift to modular domain teams with depth-2 nesting:
 - **Orchestrator (main)**: Routes tasks to appropriate team leads, manages system config.
-- **Team Leads** (depth-1): Domain specialists (research-lead, startup-lead, jobs-lead) that understand their domain context.
+- **Team Leads** (depth-1): Domain specialists (research-lead, market-research-lead) that understand their domain context.
 - **Workers** (depth-2): Spawned by leads for specific subtasks, inherit parent's sandbox.
 - Teams added incrementally: a new lead plus Discord channel plus tool policy is all that's needed.
 
@@ -134,7 +134,7 @@ Mechanisms:
 - **Fallback chain** (per ADR-024): `gemini-2.5-pro` → `gpt-4.1` → `claude-haiku-4-5`
 - **Sandbox**: `mode: "all"`, `network: none` (consistent with all Hive agents)
 - **Discord**: Channel-bound to `#cooking`; also responds to DMs
-- **Kroger integration**: Pre-fetch pattern (same as email triage and the job search pipeline). Agent writes a request, host cron script calls the Kroger API, results land in workspace, agent reads. This keeps the agent inside its `network: none` sandbox.
+- **Kroger integration**: Pre-fetch pattern (same as email triage). Agent writes a request, host cron script calls the Kroger API, results land in workspace, agent reads. This keeps the agent inside its `network: none` sandbox.
 
 **Consequences**:
 - New domain team added without touching the existing architecture, proving out ADR-014's "add by config, not by refactor" claim.
@@ -144,12 +144,12 @@ Mechanisms:
 
 ---
 
-## ADR-024: Cost Optimization Post-GCP Credits
+## ADR-024: Cost Optimization After Google Cloud Credits
 
 **Status**: Accepted
 **Supersedes**: Sections of ADR-004 (LiteLLM cost control) and ADR-015 (API keys over subscription).
 
-**Context**: The $300 GCP credit program that covered Gemini API usage during Phases 3A-10 was exhausted in early April 2026. Every Gemini token now bills directly. The system was built under "use the best model because credits are free" assumptions, and those assumptions no longer hold. The unoptimized projection without credits ran well over the LiteLLM hard cap, which is unacceptable. The goal is **best value for spend**, not cheapest possible. Per-agent model tiering holds steady-state spend comfortably under that hard ceiling.
+**Context**: The $300 Google Cloud credit program that covered Gemini API usage during Phases 3A-10 was exhausted in early April 2026. Every Gemini token now bills directly. The system was built under "use the best model because credits are free" assumptions, and those assumptions no longer hold. The unoptimized projection without credits ran well over the LiteLLM hard cap, which is unacceptable. The goal is **best value for spend**, not cheapest possible. Per-agent model tiering holds steady-state spend comfortably under that hard ceiling.
 
 **Decision**: Retain high-capability models where creative or factual quality is load-bearing; downgrade the orchestrator and ops to Flash tier; replace Sonnet with Haiku 4.5 as the Anthropic fallback for every agent except the research lead.
 
@@ -158,7 +158,7 @@ Mechanisms:
 | `main` (Queenie) | `gemini-3-flash-preview` | `gemini-2.5-flash` | `gpt-4.1-mini` | `claude-haiku-4-5` |
 | `ops` | `gemini-3-flash-preview` | `gemini-2.5-flash` | `gpt-4.1-mini` | `claude-haiku-4-5` |
 | `chef-lead` | `gemini-3.1-pro-preview-customtools` | `gemini-2.5-pro` | `gpt-4.1` | `claude-haiku-4-5` |
-| `research-lead` (Q) | `gemini-3.1-pro-preview-customtools` | `gemini-2.5-pro` | `gpt-4.1` | `claude-sonnet-4-6` |
+| `research-lead` | `gemini-3.1-pro-preview-customtools` | `gemini-2.5-pro` | `gpt-4.1` | `claude-sonnet-4-6` |
 
 Infrastructure fixes alongside the model changes:
 - `openclaw.json` cost metadata corrected (Gemini 2.5 models were previously marked $0 input/output, a relic of the credits era, so LiteLLM budget tracking was undercounting spend).
@@ -170,14 +170,14 @@ Infrastructure fixes alongside the model changes:
 - Orchestrator and ops costs drop substantially without quality risk (their work is classification + dispatch).
 - Creative agents keep Pro CustomTools because that's where personality and cooking creativity actually live.
 - Fallback chains are no longer a spike risk during provider outages; Haiku 4.5 is 5x cheaper than Sonnet 4.6 with similar quality on routine work.
-- Q (research-lead) keeps Sonnet as its last-resort fallback because factual accuracy on career documents is load-bearing even when infrastructure is degraded.
+- research-lead keeps Sonnet as its last-resort fallback because factual accuracy on research documents is load-bearing even when infrastructure is degraded.
 
 ---
 
 ## ADR-025: Active Memory Plugin Adoption
 
 **Status**: Accepted
-**Context**: Hive's memory surface has grown meaningfully. The work-repo auto-memory is at ~20 files today and projected to land in the 500-1000 range over twelve months as daily briefings, market intel, the job search pipeline, chef inventory, and Discord DMs accumulate. Agent workspace memory already spans `workspace-main/memory/`, `workspace-research-lead/memory/`, and `workspace-chef-lead/memory/`. QMD has a hybrid vector+text+MMR index with temporal decay. Despite all of this, recall misses still happen: agents answer without relevant prior context, or the operator has to re-supply background that's already in memory. The summary-based context-loading pattern degrades past ~50 files and becomes untenable past a few hundred.
+**Context**: Hive's memory surface has grown meaningfully. The work-repo auto-memory is at ~20 files today and projected to land in the 500-1000 range over twelve months as daily briefings, market intel, chef inventory, and Discord DMs accumulate. Agent workspace memory already spans `workspace-main/memory/`, `workspace-research-lead/memory/`, and `workspace-chef-lead/memory/`. QMD has a hybrid vector+text+MMR index with temporal decay. Despite all of this, recall misses still happen: agents answer without relevant prior context, or the operator has to re-supply background that's already in memory. The summary-based context-loading pattern degrades past ~50 files and becomes untenable past a few hundred.
 
 The previous working answer was the parked "Path A" exploration: stand up a local llama.cpp + embedding server on the host and build a client-side RAG layer. OpenClaw 2026.4.12 (released 2026-04-12) added the Active Memory plugin, which solves the same problem server-side with zero local infrastructure.
 
@@ -190,7 +190,7 @@ Configuration:
 - `persistTranscripts: true` for the first review cycle so memory-selection quality can be audited, then flip back to `false` to save disk.
 
 Per-agent rationale:
-- **`research-lead` (Q)**: deep-reasoning work, long memory of investigations, market intel state, job search pipeline history. Highest-value recall surface.
+- **`research-lead`**: deep-reasoning work, long memory of investigations, market intel state. Highest-value recall surface.
 - **`chef-lead` (Chef Antoine)**: inventory from photos, past recipes, stored preferences, Kroger ops context. Memory-heavy interactive agent.
 - **`main` (Queenie)**: orchestrator that also handles Discord DMs directly. User-preference recall matters. Watch DM latency.
 - **`ops`**: scheduled health checks and email triage; mostly stateless. No benefit.

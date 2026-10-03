@@ -1,4 +1,4 @@
-# Hive: Self-Hosted Multi-Agent AI Infrastructure
+# Hive: Self-Hosted AI Agent Platform
 
 > A self-hosted multi-agent platform I built for my own research, email triage and scheduled workflows, with per-agent Docker sandboxing, zero public ports and a hard monthly spending ceiling. Development is paused.
 
@@ -12,7 +12,7 @@
 
 ## Problem
 
-Cloud AI agent services (Azure AI Agent Service, AWS Bedrock Agents) charge per-interaction, offer limited customization, and create vendor lock-in. For a self-hosted multi-agent platform spanning automated research, email triage, cron-driven workflows, and cross-agent knowledge sharing, cloud spend compounds quickly, observability is opaque, and multi-agent orchestration is constrained by provider abstractions.
+I built Hive to run my own research, email triage and scheduled workflows on one self-hosted server. Hosted agent services (Azure AI Agent Service, AWS Bedrock Agents) charge per interaction, limit customization and tie the work to one vendor, so cost compounds, observability is opaque and multi-agent orchestration is constrained by the provider's abstractions.
 
 The challenge: build a multi-agent system on one self-hosted server that owns its own security, cost governance, memory recall and uptime.
 
@@ -66,7 +66,7 @@ graph TB
 | Component | Function |
 |-----------|----------|
 | **OpenClaw Gateway** | Agent lifecycle, session management, tool routing, bindings to Discord/CLI/webhooks |
-| **Orchestrator (main)** | Depth-1 agent: delegates to domain team leads, manages config, broad tool access |
+| **Orchestrator (main)** | Top-level agent (depth 0): delegates to domain team leads, manages config, broad tool access |
 | **Domain Team Leads** | Depth-1 specialists (research, market research), each spawning depth-2 workers |
 | **QMD Memory** | Hybrid search (BM25 + vector embeddings + MMR reranking) with temporal decay; zero API cost |
 | **LiteLLM Proxy** | Model routing with hard monthly budget caps, per-model spend tracking, semantic caching, cross-group fallback |
@@ -77,7 +77,6 @@ graph TB
 | Technology | Role | Why This Choice |
 |-----------|------|-----------------|
 | Ubuntu Server 24.04 LTS | Host OS | Headless, LTS support, unattended security upgrades |
-| Single-node host | Deployment target | One self-hosted server |
 | OpenClaw | Agent framework | Multi-agent orchestration, depth-2 nesting, Docker sandboxing, session management |
 | Google Gemini API | Primary LLM | Cost-effective (free tier for development), high quality, tool-use capable |
 | LiteLLM + Redis | Model proxy + cache | Multi-provider routing, budget caps, semantic caching, fallback chains |
@@ -96,10 +95,10 @@ graph TB
 | **1. Network Isolation** | Zero public ports | iptables INPUT DROP + Tailscale-only access |
 | **2. Secrets Management** | No plaintext credentials | 1Password CLI + tmpfs env file via systemd EnvironmentFile |
 | **3. Access Control** | Per-user, per-agent isolation | DM pairing, session scoping, mention-gating, layered tool policies |
-| **3.5. Prompt Injection** | Untrusted content isolation | Sandboxed agents process external content; denied `sessions_send`/`sessions_spawn` |
-| **4. Execution Isolation** | Per-agent Docker sandboxing | `--cap-drop=ALL`, `--security-opt=no-new-privileges`, no network, `scope: "agent"` |
-| **5. Infrastructure** | Host hardening | LUKS encryption, dedicated service user, 700/600 file permissions, security-only auto-updates |
-| **6. Supply Chain** | Dependency vetting | Plugin allowlist, version pinning, `openclaw security audit --deep`, ClawHub skills vetting (ADR-017) |
+| **4. Prompt Injection** | Untrusted content isolation | Sandboxed agents process external content; denied `sessions_send`/`sessions_spawn` |
+| **5. Execution Isolation** | Per-agent Docker sandboxing | `--cap-drop=ALL`, `--security-opt=no-new-privileges`, no network, `scope: "agent"` |
+| **6. Infrastructure** | Host hardening | LUKS encryption, dedicated service user, 700/600 file permissions, security-only auto-updates |
+| **7. Supply Chain** | Dependency vetting | Plugin allowlist, version pinning, `openclaw security audit --deep`, ClawHub skills vetting (ADR-017) |
 
 ## Technical Challenges & Solutions
 
@@ -131,14 +130,14 @@ graph TB
 | ADR-014 | Modular Domain Team Architecture | Teams added incrementally without architectural changes; depth-2 nesting (lead → workers) |
 | ADR-016 | Adaptive Self-Improvement | Weekly self-assessment cron, tiered config change autonomy, cross-agent knowledge sharing |
 | ADR-020 | Runtime Change Protocol | Structured workflow for config changes: propose → verify → apply → test → commit |
-| ADR-024 | Cost Optimization Post-GCP Credits | Per-agent model tiering holds spend under a hard monthly ceiling after free credits were exhausted: orchestrator and ops drop to Flash, leads whose output quality depends on the model stay on Pro, and the Anthropic fallback shifts Sonnet to Haiku for every agent except the research lead |
+| ADR-024 | Cost Optimization After Google Cloud Credits | Per-agent model tiering holds spend under a hard monthly ceiling after free credits were exhausted: orchestrator and ops drop to Flash, leads whose output quality depends on the model stay on Pro, and the Anthropic fallback shifts Sonnet to Haiku for every agent except the research lead |
 | ADR-025 | Active Memory Plugin Adoption | Retrieval over the existing QMD memory before each reply, enabled for main and the domain leads (not ops) |
 
 See [docs/tech-decisions.md](docs/tech-decisions.md) for detailed ADR excerpts.
 
 ## Results
 
-- **25 Architectural Decision Records** documenting every significant technical choice
+- **25 Architecture Decision Records** covering the main technical choices
 - **130+ development tasks** across the completed phases; development is paused
 - **Security layered from network to supply chain**
 - **Modular domain teams**: research-lead, market-research-lead, ops, with workers spawned on demand
@@ -146,7 +145,7 @@ See [docs/tech-decisions.md](docs/tech-decisions.md) for detailed ADR excerpts.
 - **Zero public ports**: reachable only over the Tailscale mesh; no inbound exposure on any public interface
 - **Weekly self-assessment cron** with cross-agent knowledge sharing
 - **Encrypted disks (LUKS + TPM2) and automated backups on systemd timers**
-- **Cost-governed model tiering post-GCP credits**: per-agent Pro/Flash/Haiku assignments hold spend under a hard monthly ceiling
+- **Cost-governed model tiering after the Google Cloud credits ran out**: per-agent Pro/Flash/Haiku assignments hold spend under a hard monthly ceiling
 
 ## Project Status
 
@@ -161,8 +160,8 @@ See [docs/tech-decisions.md](docs/tech-decisions.md) for detailed ADR excerpts.
 | Phase 4: Expansion | Done | Firewall hardening, skill deployment |
 | Phase 5: Polish & Observability | Done | Mermaid diagrams, CI, Langfuse |
 | Phase 6: Production Hardening | Done | Auto-updates, backup automation |
-| Phase 7: CC Runtime Engine | Done | Claude Code CLI integration, piped automation, build hooks |
-| Phase 7E: Q Intelligence Power-Up | Paused | Research-lead reasoning expansion, citation discipline, anti-fabrication hardening; integration testing |
+| Phase 7: Claude Code Runtime | Done | Claude Code CLI integration, piped automation, build hooks |
+| Phase 7E: Research-Lead Reasoning | Paused | Reasoning expansion, citation discipline, anti-fabrication hardening; integration testing |
 | Phase 8: Research Pipeline Expansion | Paused | Extended document extraction, structured output generation, Google Docs integration, validation runs in progress |
 
 ---
