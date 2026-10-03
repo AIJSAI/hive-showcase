@@ -12,13 +12,13 @@
 
 ## Problem
 
-I built Hive to run my own research, email triage and scheduled workflows on one self-hosted server. Hosted agent services (Azure AI Agent Service, AWS Bedrock Agents) charge per interaction, limit customization and tie the work to one vendor, so cost compounds, observability is opaque and multi-agent orchestration is constrained by the provider's abstractions.
+I built Hive to run my own research, email triage and scheduled workflows on one self-hosted server. Hosted agent services (Azure AI Agent Service, AWS Bedrock Agents) charge per interaction, limit customization and tie the work to one vendor, so costs add up, it is hard to see what the agents are doing, and orchestration is limited to what the provider offers.
 
-The challenge: build a multi-agent system on one self-hosted server that owns its own security, cost governance, memory recall and uptime.
+The work was to run a multi-agent system on one self-hosted server and own its security, cost governance, memory recall and uptime myself.
 
 ## Architecture
 
-Hive runs as a single-node deployment with **security layered in depth**, modular agent teams, and zero public-facing ports.
+Hive runs on a single machine with **security in layers**, modular agent teams and zero public-facing ports.
 
 ```mermaid
 graph TB
@@ -50,7 +50,7 @@ graph TB
         end
     end
 
-    APIs["External APIs<br/>Gemini · Anthropic<br/>ElevenLabs · Brave"] -->|HTTPS outbound| Gateway
+    APIs["External APIs<br/>Gemini · OpenAI · Anthropic<br/>ElevenLabs · Brave"] -->|HTTPS outbound| Gateway
     Gateway -->|Tailscale mesh| Mac["Admin workstation<br/>(Tailscale SSH)"]
     Gateway --> Discord["Discord<br/>Channels"]
 
@@ -124,7 +124,7 @@ graph TB
 
 | ADR | Decision | Rationale |
 |-----|----------|-----------|
-| ADR-001 | OpenClaw-Native Architecture | Custom agent framework provides depth-2 nesting, Discord integration, and Docker sandboxing that cloud alternatives lack |
+| ADR-001 | OpenClaw-Native Architecture | The OpenClaw framework provides depth-2 nesting, Discord integration and Docker sandboxing that the hosted alternatives lack |
 | ADR-003 | 1Password Hybrid Secrets | Budget-friendly secrets management: `op run` + tmpfs + env substitution, zero plaintext on disk |
 | ADR-012 | Docker Privilege Model | Standard Docker with --cap-drop=ALL: the sandbox boundary is the container |
 | ADR-014 | Modular Domain Team Architecture | Teams added incrementally without architectural changes; depth-2 nesting (lead → workers) |
