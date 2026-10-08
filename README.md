@@ -30,12 +30,12 @@ graph TB
             end
             subgraph Teams["Domain Teams (incremental)"]
                 research["research-lead<br/>↓ workers"]
-                market["market-research-lead<br/>↓ workers"]
+                more["further leads<br/>(added by config)"]
             end
             subgraph Subs["Subsystems"]
                 qmd["QMD Memory<br/>BM25 + vector + reranking"]
                 cron["Cron Scheduler"]
-                hooks["Hooks + Webhooks"]
+                hooks["Hooks<br/>session memory, logging, boot"]
                 chromium["Headless Chromium"]
             end
         end
@@ -65,9 +65,9 @@ graph TB
 
 | Component | Function |
 |-----------|----------|
-| **OpenClaw Gateway** | Agent lifecycle, session management, tool routing, bindings to Discord/CLI/webhooks |
+| **OpenClaw Gateway** | Agent lifecycle, session management, tool routing, bindings to Discord and the CLI |
 | **Orchestrator (main)** | Top-level agent (depth 0): delegates to domain team leads, manages config, broad tool access |
-| **Domain Team Leads** | Depth-1 specialists (research, market research), each spawning depth-2 workers |
+| **Domain Team Leads** | Depth-1 specialists, starting with the research lead, each spawning depth-2 workers |
 | **QMD Memory** | Hybrid search (BM25 + vector embeddings + MMR reranking) with temporal decay; zero API cost |
 | **LiteLLM Proxy** | Model routing with hard monthly budget caps, per-model spend tracking, semantic caching, cross-group fallback |
 | **Docker Sandboxes** | Per-agent isolation with `--cap-drop=ALL`, `--security-opt=no-new-privileges`, no network access |
@@ -108,29 +108,29 @@ graph TB
 
 **Solution**: Accepted standard Docker over rootless for a single-user machine and made the container the boundary: no network, dropped capabilities and no-new-privileges, with each agent's workspace on its own bind mount (ADR-012).
 
-### 2. Elevated Exec Deadlock
+### 2. Host Exec Deadlock
 
 **Challenge**: Setting `elevatedDefault: "on"` routes ALL exec calls for ALL agents to the host (requiring manual approval via Discord). With 5+ agents running, the approval queue becomes a bottleneck, and if Discord is unreachable, all agents deadlock with no exec at all.
 
-**Solution**: Keep `elevatedDefault` off (omitted from config). Agents exec inside their Docker sandbox by default (no approval needed). Only the orchestrator (`main`) can request elevated (host-level) exec, gated by per-command approval via Discord. Anti-pattern documented: never set per-agent `elevated.enabled: true` on sandboxed agents, since it has the same deadlocking effect.
+**Solution**: Keep `elevatedDefault` off (omitted from config). Agents exec inside their Docker sandbox by default (no approval needed). Only the orchestrator (`main`) can request host-level exec, gated by per-command approval via Discord. Anti-pattern documented: never set per-agent `elevated.enabled: true` on sandboxed agents, since it has the same deadlocking effect.
 
 ### 3. Secrets on a Budget
 
 **Challenge**: 1Password Individual plan doesn't support service accounts or Connect Server. Production agent frameworks need credentials injected at runtime without human interaction, but `op` CLI requires either an interactive session or specific auth mechanisms.
 
-**Solution**: Hybrid secrets model (ADR-003). systemd `EnvironmentFile` loads credentials from a tmpfs-backed file populated at boot via `op run`. Config uses `${ENV_VAR}` substitution for fields that don't support OpenClaw's native SecretRef. Net result: zero plaintext secrets on persistent disk, runtime injection without service accounts.
+**Solution**: Hybrid secrets model (ADR-003). systemd `EnvironmentFile` loads credentials from a tmpfs-backed file that `op run` populates after a manual 1Password sign-in on each reboot. Config uses `${ENV_VAR}` substitution for fields that don't support OpenClaw's native SecretRef. Net result: zero plaintext secrets on persistent disk, runtime injection without service accounts.
 
 ## Key Decisions
 
 | ADR | Decision | Rationale |
 |-----|----------|-----------|
-| ADR-001 | OpenClaw-Native Architecture | The OpenClaw framework provides depth-2 nesting, Discord integration and Docker sandboxing that the hosted alternatives lack |
+| ADR-001 | OpenClaw-Native Architecture | OpenClaw already provides multi-agent routing, memory, cron, channels and sandboxing, so building on it replaced weeks of custom orchestration with configuration |
 | ADR-003 | 1Password Hybrid Secrets | Budget-friendly secrets management: `op run` + tmpfs + env substitution, zero plaintext on disk |
 | ADR-012 | Docker Privilege Model | Standard Docker with --cap-drop=ALL: the sandbox boundary is the container |
 | ADR-014 | Modular Domain Team Architecture | Teams added incrementally without architectural changes; depth-2 nesting (lead → workers) |
 | ADR-016 | Adaptive Self-Improvement | Weekly self-assessment cron, tiered config change autonomy, cross-agent knowledge sharing |
-| ADR-020 | Runtime Change Protocol | Structured workflow for config changes: propose → verify → apply → test → commit |
-| ADR-024 | Cost Optimization After Google Cloud Credits | Per-agent model tiering holds spend under a hard monthly ceiling after free credits were exhausted: orchestrator and ops drop to Flash, leads whose output quality depends on the model stay on Pro, and the Anthropic fallback shifts Sonnet to Haiku for every agent except the research lead |
+| ADR-020 | Runtime Change Protocol | Every change to the live system goes through plan → apply → verify, with a config snapshot taken first for instant rollback |
+| ADR-024 | Cost Optimization After Google Cloud Credits | Per-agent model tiering holds spend under a hard monthly ceiling after free credits were exhausted: the orchestrator drops to Flash alongside ops, leads whose output quality depends on the model stay on Pro, and the Anthropic fallback shifts Sonnet to Haiku for every agent except the research lead |
 | ADR-025 | Active Memory Plugin Adoption | Retrieval over the existing QMD memory before each reply, enabled for main and the domain leads (not ops) |
 
 See [docs/tech-decisions.md](docs/tech-decisions.md) for detailed ADR excerpts.
@@ -140,11 +140,11 @@ See [docs/tech-decisions.md](docs/tech-decisions.md) for detailed ADR excerpts.
 - **25 Architecture Decision Records** covering the main technical choices
 - **130+ development tasks** across the completed phases; development is paused
 - **Security layered from network to supply chain**
-- **Modular domain teams**: research-lead, market-research-lead, ops, with workers spawned on demand
+- **Modular domain teams**: an orchestrator and an ops agent, with domain leads starting from research-lead and workers spawned on demand
 - **Retrieval over QMD memory before each reply** via the OpenClaw Active Memory plugin
 - **Zero public ports**: reachable only over the Tailscale mesh; no inbound exposure on any public interface
 - **Weekly self-assessment cron** with cross-agent knowledge sharing
-- **Encrypted disks (LUKS + TPM2) and automated backups on systemd timers**
+- **Encrypted disks (LUKS with TPM2 auto-unlock) and daily encrypted backups on a cron job**
 - **Cost-governed model tiering after the Google Cloud credits ran out**: per-agent Pro/Flash/Haiku assignments hold spend under a hard monthly ceiling
 
 ## Project Status
@@ -159,10 +159,10 @@ See [docs/tech-decisions.md](docs/tech-decisions.md) for detailed ADR excerpts.
 | Phase 3C: Extensions | Done | LiteLLM, voice pipeline, browser automation |
 | Phase 4: Expansion | Done | Firewall hardening, skill deployment |
 | Phase 5: Polish & Observability | Done | Mermaid diagrams, CI, Langfuse |
-| Phase 6: Production Hardening | Done | Auto-updates, backup automation |
+| Phase 6: Proactive Intelligence | Done | Morning briefing upgrades, research-lead activation, research tooling |
 | Phase 7: Claude Code Runtime | Done | Claude Code CLI integration, piped automation, build hooks |
 | Phase 7E: Research-Lead Reasoning | Paused | Reasoning expansion, citation discipline, anti-fabrication hardening; integration testing |
-| Phase 8: Research Pipeline Expansion | Paused | Extended document extraction, structured output generation, Google Docs integration, validation runs in progress |
+| Phase 8: Research Pipeline Expansion | Paused | Extended document extraction, structured output generation, Google Docs integration; validation was pending when development paused |
 
 ---
 

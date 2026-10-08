@@ -7,21 +7,21 @@ This document contains excerpts from the project's Architecture Decision Records
 ## ADR-001: OpenClaw-Native Architecture
 
 **Status**: Accepted  
-**Context**: Multiple agent frameworks were evaluated: LangChain, AutoGen, CrewAI, and OpenClaw. The system requires: multi-agent orchestration with depth-2+ nesting, persistent sessions across restarts, Docker sandboxing per agent, Discord/CLI/webhook bindings, and local semantic memory. Cloud-hosted alternatives (AWS Bedrock Agents, Azure AI Agent Service) were rejected on cost and customization grounds.
+**Context**: The first research documents proposed a custom Docker Compose stack (a Traefik reverse proxy, Qdrant, Redis and custom Python orchestration) for the multi-agent system. That meant building model routing, session management, conversation memory and scheduled automation from scratch. The system needs per-agent isolation, scheduled automation, persistent semantic memory, channel integrations and browser automation, with minimal custom code to maintain.
 
-**Decision**: Build on OpenClaw as the native agent framework. OpenClaw provides:
+**Decision**: Install OpenClaw natively and build on its capabilities instead of the custom stack. OpenClaw runs as a systemd user service on the host; Docker is used only for agent sandboxes and the LiteLLM and Redis containers. OpenClaw provides:
 - Multi-agent gateway with depth-2 nesting (orchestrator → team leads → workers)
 - Per-agent Docker sandboxing with configurable capabilities
 - Session management with DM pairing and channel-per-domain routing
-- Hook system for session-memory, audit, and boot triggers
+- Hook system for session memory, command logging and boot triggers
 - Cron scheduler for automated workflows
 - QMD memory backend with hybrid search
 
 **Consequences**:
-- Full control over agent configuration, security policies, and tool routing.
+- Deployment measured in days, not weeks: configuration instead of development.
 - Single-node deployment with no orchestration overhead (Kubernetes, etc.).
-- Tightly coupled to OpenClaw's release cycle, so version pinning is required (ADR: gateway version lag).
-- Documentation is community-driven, so some trial-and-error is required for edge cases.
+- Dependency on the OpenClaw project for fixes and features, so version pinning is required.
+- Configuration has to follow OpenClaw's own patterns and conventions.
 
 ---
 
@@ -37,7 +37,7 @@ This document contains excerpts from the project's Architecture Decision Records
 **Consequences**:
 - Zero plaintext secrets on persistent disk, since `/run/` is tmpfs (cleared on reboot).
 - Two credential paths (env substitution + SecretRef) add complexity but cover all config fields.
-- 1Password CLI must be authenticated (device trust), a one-time interactive setup per machine.
+- Without service accounts, the 1Password CLI needs a manual sign-in after each reboot, the one manual step in an otherwise unattended boot.
 - `openclaw doctor` may report "unresolved SecretRef" when run outside systemd context, a false negative (secrets resolve at runtime).
 
 ---
@@ -63,11 +63,11 @@ This document contains excerpts from the project's Architecture Decision Records
 ## ADR-014: Modular Domain Team Architecture
 
 **Status**: Accepted  
-**Context**: The initial plan defined 4 fixed agents (main, ops, research and one domain agent). As requirements grew, this rigid structure couldn't accommodate new domains (email triage, content creation, personal planning) without architectural changes.
+**Context**: The initial plan defined 4 fixed agents (personal, ops, shared and researcher). As requirements grew, this rigid structure couldn't accommodate new domains (wine, startups, product development) without architectural changes.
 
 **Decision**: Shift to modular domain teams with depth-2 nesting:
 - **Orchestrator (main)**: Routes tasks to appropriate team leads, manages system config.
-- **Team Leads** (depth-1): Domain specialists (research-lead, market-research-lead) that understand their domain context.
+- **Team Leads** (depth-1): Domain specialists that understand their domain context; `research-lead` was the pilot team.
 - **Workers** (depth-2): Spawned by leads for specific subtasks, inherit parent's sandbox.
 - Teams added incrementally: a new lead plus Discord channel plus tool policy is all that's needed.
 
@@ -90,7 +90,7 @@ This document contains excerpts from the project's Architecture Decision Records
 
 Mechanisms:
 - `MEMORY.md` per agent for structured reflection and learning.
-- Weekly cron job (Sunday 10 AM) reviews orchestrator memory, recent team spawns, and lead insights.
+- Weekly cron job (Sunday, on a cost-optimized model) reviews orchestrator memory, recent team spawns, and lead insights.
 - Outputs weekly review to `memory/reviews/YYYY-WXX.md` and delivers 3-5 bullet summary to Discord.
 - Cross-agent knowledge sharing: orchestrator reads `## Shareable Insights` from domain lead memory files.
 
@@ -104,34 +104,18 @@ Mechanisms:
 ## ADR-020: Runtime Change Protocol
 
 **Status**: Accepted  
-**Context**: Configuration changes to a live agent system carry risk: a bad config can deadlock all agents (see elevated exec deadlock), break sandbox isolation, or wipe security allowlists (see exec-approvals.json trailing comma bug). Ad-hoc changes via interactive sessions lack audit trails and rollback capability.
+**Context**: After the first phases, changes to the live server (config edits, workspace deployments, credential rotations, sandbox adjustments) kept causing incidents. More than 10 documented incidents traced to one root cause: runtime changes applied without pre-flight analysis, a config snapshot, a blast-radius check or structured verification afterward. Examples included wrong model prefixes that broke routing, a sandbox network setting that broke per-agent isolation, a plugin enabled without being allowed, and plaintext API keys left in config files.
 
-**Decision**: Structured runtime change workflow:
-1. **Propose**: Agent (or operator) describes the change and rationale.
-2. **Verify preconditions**: Run `openclaw doctor`, check `exec-approvals.json` validity, snapshot current config.
-3. **Apply**: Make the change (config edit, restart if needed).
-4. **Test**: Run `openclaw security audit --deep`, verify agent functionality.
-5. **Commit**: Push to hive-runtime repo with descriptive commit message.
-6. **Rollback plan**: If verification fails, restore snapshot.
+**Decision**: Adopt a Runtime Change Protocol: a three-phase gate (Plan → Apply → Verify) inside the existing implementation checkpoints, required whenever a change touches the live system.
+- **Plan**: read the official OpenClaw configuration and security docs for the keys being changed, check constraints, and assess blast radius.
+- **Apply**: take a config snapshot first, then make the change.
+- **Verify**: check health, security, credentials and function after the change, including a sweep of the eight credential locations that OpenClaw's security docs list.
 
 **Consequences**:
-- Every config change has an audit trail (git history in hive-runtime repo).
-- Verification gates catch common pitfalls (JSON syntax, doctor warnings).
-- Rollback is always available via git revert.
-- Slightly more ceremony per change, an accepted trade-off for production stability.
-
----
-
-## ADR-023: Personal Domain Team
-
-**Status**: Accepted
-**Context**: A personal domain needed its own agent, with memory of past requests and a path to an outside service's public API.
-
-**Decision**: Add a `personal-lead` domain team (a lead, no workers initially) under the ADR-014 expansion protocol. Its outside data arrives through the same host pre-fetch pattern as email triage, so the agent stays inside its `network: none` sandbox.
-
-**Consequences**:
-- A new domain team was added by configuration, without touching the existing architecture, which proved out ADR-014's "add by config, not by refactor" claim.
-- Any action with real-world effect stays manual.
+- Pre-flight analysis catches constraint violations before they reach the live system.
+- Config snapshots enable instant rollback when verification fails.
+- The credential sweep keeps plaintext secrets from being deployed.
+- More process for every runtime change, mitigated because most steps are quick CLI commands.
 
 ---
 
@@ -142,13 +126,12 @@ Mechanisms:
 
 **Context**: The free Google Cloud credit program that covered Gemini API usage during Phases 3A-10 was exhausted in early April 2026. Every Gemini token now bills directly. The system was built under "use the best model because credits are free" assumptions, and those assumptions no longer hold. The unoptimized projection without credits ran well over the LiteLLM hard cap, which is unacceptable. The goal is **best value for spend**, not cheapest possible. Per-agent model tiering holds steady-state spend comfortably under that hard ceiling.
 
-**Decision**: Retain high-capability models where creative or factual quality is load-bearing; downgrade the orchestrator and ops to Flash tier; replace Sonnet with Haiku 4.5 as the Anthropic fallback for every agent except the research lead.
+**Decision**: Retain high-capability models where creative or factual quality is load-bearing; move the orchestrator to the Flash tier ops already used; replace Sonnet with Haiku 4.5 as the Anthropic fallback for every agent except the research lead.
 
 | Agent | Primary | Google fallback | OpenAI fallback | Anthropic fallback |
 |---|---|---|---|---|
 | `main` (Queenie) | `gemini-3-flash-preview` | `gemini-2.5-flash` | `gpt-4.1-mini` | `claude-haiku-4-5` |
 | `ops` | `gemini-3-flash-preview` | `gemini-2.5-flash` | `gpt-4.1-mini` | `claude-haiku-4-5` |
-| `personal-lead` | `gemini-3.1-pro-preview-customtools` | `gemini-2.5-pro` | `gpt-4.1` | `claude-haiku-4-5` |
 | `research-lead` | `gemini-3.1-pro-preview-customtools` | `gemini-2.5-pro` | `gpt-4.1` | `claude-sonnet-4-6` |
 
 Infrastructure fixes alongside the model changes:
@@ -159,8 +142,8 @@ Infrastructure fixes alongside the model changes:
 
 **Consequences**:
 - Orchestrator and ops costs drop substantially without quality risk (their work is classification + dispatch).
-- Creative agents keep Pro CustomTools because that's where personality and creative quality actually live.
-- Fallback chains are no longer a spike risk during provider outages; Haiku 4.5 is 5x cheaper than Sonnet 4.6 with similar quality on routine work.
+- The leads keep Pro CustomTools where output quality depends on the model; the research lead's prompts were tuned to that model's behavior.
+- Fallback chains are no longer a spike risk during provider outages; Haiku 4.5 costs about a third as much as Sonnet 4.6.
 - research-lead keeps Sonnet as its last-resort fallback because factual accuracy on research documents is load-bearing even when infrastructure is degraded.
 
 ---
@@ -168,11 +151,11 @@ Infrastructure fixes alongside the model changes:
 ## ADR-025: Active Memory Plugin Adoption
 
 **Status**: Accepted
-**Context**: Hive's memory surface has grown meaningfully. The work-repo auto-memory is at ~20 files today and projected to land in the 500-1000 range over twelve months as daily briefings, market intel, personal-domain notes, and Discord DMs accumulate. Agent workspace memory already spans `workspace-main/memory/`, `workspace-research-lead/memory/`, and `workspace-personal-lead/memory/`. QMD has a hybrid vector+text+MMR index with temporal decay. Despite all of this, recall misses still happen: agents answer without relevant prior context, or the operator has to re-supply background that's already in memory. The summary-based context-loading pattern degrades past ~50 files and becomes untenable past a few hundred.
+**Context**: Hive's memory surface has grown meaningfully. The work-repo auto-memory is at ~20 files today and projected to land in the 500-1000 range over twelve months as daily briefings, market intel and Discord DMs accumulate. Agent workspace memory already spans `workspace-main/memory/`, `workspace-research-lead/memory/` and a second domain lead's workspace. QMD has a hybrid vector+text+MMR index with temporal decay. Despite all of this, recall misses still happen: agents answer without relevant prior context, or the operator has to re-supply background that's already in memory. The summary-based context-loading pattern degrades past ~50 files and becomes untenable past a few hundred.
 
 The previous working answer was the parked "Path A" exploration: stand up a local llama.cpp + embedding server on the host and build a client-side RAG layer. OpenClaw 2026.4.12 (released 2026-04-12) added the Active Memory plugin, which solves the same problem server-side with zero local infrastructure.
 
-**Decision**: Enable the Active Memory plugin for `main`, `research-lead`, and `personal-lead`. Skip `ops`.
+**Decision**: Enable the Active Memory plugin for `main`, `research-lead` and the other domain lead. Skip `ops`.
 
 Configuration:
 - `model: gemini-3-flash-preview` (lowest tier trusted for structured memory-selection work; matches ADR-024's cost-optimization principle).
@@ -182,7 +165,6 @@ Configuration:
 
 Per-agent rationale:
 - **`research-lead`**: deep-reasoning work, long memory of investigations, market intel state. Highest-value recall surface.
-- **`personal-lead`**: stored preferences and past requests. Memory-heavy interactive agent.
 - **`main` (Queenie)**: orchestrator that also handles Discord DMs directly. User-preference recall matters. Watch DM latency.
 - **`ops`**: scheduled health checks and email triage; mostly stateless. No benefit.
 
