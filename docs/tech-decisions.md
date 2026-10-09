@@ -9,7 +9,7 @@ This document contains excerpts from the project's Architecture Decision Records
 **Status**: Accepted  
 **Context**: The first research documents proposed a custom Docker Compose stack (a Traefik reverse proxy, Qdrant, Redis and custom Python orchestration) for the multi-agent system. That meant building model routing, session management, conversation memory and scheduled automation from scratch. The system needs per-agent isolation, scheduled automation, persistent semantic memory, channel integrations and browser automation, with minimal custom code to maintain.
 
-**Decision**: Install OpenClaw natively and build on its capabilities instead of the custom stack. OpenClaw runs as a systemd user service on the host; Docker is used only for agent sandboxes and the LiteLLM and Redis containers. OpenClaw provides:
+**Decision**: Install OpenClaw natively and build on its capabilities instead of the custom stack. OpenClaw runs as a systemd user service on the host; Docker is used only for agent sandboxes and the LiteLLM, Redis and PostgreSQL containers (PostgreSQL backs LiteLLM's spend tracking). OpenClaw provides:
 - Multi-agent gateway with depth-2 nesting (orchestrator → team leads → workers)
 - Per-agent Docker sandboxing with configurable capabilities
 - Session management with DM pairing and channel-per-domain routing
