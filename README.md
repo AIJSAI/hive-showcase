@@ -8,6 +8,8 @@
 
 [Portfolio case study](https://jamesshehan.dev/projects/hive) · [Blog post](https://jamesshehan.dev/blog/architecture-decisions-self-hosting-multi-agent-ai)
 
+Other showcases: [Connect](https://github.com/AIJSAI/connect-voice-ai-showcase) · [Ratify](https://github.com/AIJSAI/ratify-showcase) · [Vinny](https://github.com/AIJSAI/vinny-showcase) · [On the Lees](https://github.com/AIJSAI/on-the-lees-showcase) · [Backyard](https://github.com/AIJSAI/backyard-showcase) · [The Chief](https://github.com/AIJSAI/operating-partner-showcase)
+
 ---
 
 ## Problem
