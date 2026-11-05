@@ -6,6 +6,8 @@
 
 **This repository documents the architecture and design decisions for Hive. The implementation is private.**
 
+**Status (2026-11-04):** this documents the Hive v1 architecture. Its OpenClaw-based runtime was retired on 2026-10-27 (ADR-026, decided 2026-11-02); the same server now runs as a Claude Code-native node whose first workload is Hollis, a separate personal messaging agent.
+
 [Portfolio case study](https://jamesshehan.dev/projects/hive) · [Blog post](https://jamesshehan.dev/blog/architecture-decisions-self-hosting-multi-agent-ai)
 
 Other showcases: [Connect](https://github.com/AIJSAI/connect-voice-ai-showcase) · [Ratify](https://github.com/AIJSAI/ratify-showcase) · [Vinny](https://github.com/AIJSAI/vinny-showcase) · [On the Lees](https://github.com/AIJSAI/on-the-lees-showcase) · [Backyard](https://github.com/AIJSAI/backyard-showcase) · [The Chief](https://github.com/AIJSAI/operating-partner-showcase)
